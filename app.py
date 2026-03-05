@@ -51,13 +51,26 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--bg);
+            background: #0a0a0f url('/static/bg.png') no-repeat center center fixed;
+            background-size: cover;
             color: var(--text);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 2rem;
+            margin: 0;
+        }
+        /* Mobile-friendly container */
+        .container {
+            width: 100%;
+            max-width: 720px;
+            backdrop-filter: blur(8px);
+            background: rgba(0,0,0,0.3);
+            border-radius: 24px;
+            padding: 2rem;
+            border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
         .container {
             width: 100%;
@@ -77,11 +90,14 @@ HTML_TEMPLATE = """
             margin-bottom: 2rem;
         }
         .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
+            background: rgba(18, 18, 26, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: var(--radius);
             padding: 1.5rem;
             margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         label {
             display: block;
@@ -95,33 +111,37 @@ HTML_TEMPLATE = """
         textarea {
             width: 100%;
             min-height: 120px;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
+            background: rgba(26, 26, 46, 0.5);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 12px;
             padding: 1rem;
             color: var(--text);
             font-family: inherit;
             font-size: 0.9rem;
             resize: vertical;
-            transition: border-color 0.2s;
+            transition: all 0.3s ease;
         }
         textarea:focus {
             outline: none;
             border-color: var(--accent);
+            background: rgba(26, 26, 46, 0.8);
             box-shadow: 0 0 0 3px var(--accent-glow);
         }
         .drop-zone {
-            border: 2px dashed var(--border);
+            border: 2px dashed rgba(255, 255, 255, 0.15);
             border-radius: 12px;
             padding: 2rem;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s;
-            background: var(--surface-2);
+            background: rgba(26, 26, 46, 0.5);
+            backdrop-filter: blur(4px);
         }
         .drop-zone:hover, .drop-zone.dragover {
             border-color: var(--accent);
-            background: var(--accent-glow);
+            background: rgba(108, 99, 255, 0.1);
+            transform: translateY(-2px);
         }
         .drop-zone input { display: none; }
         .drop-zone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
