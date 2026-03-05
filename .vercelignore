@@ -1,0 +1,4 @@
+*.py
+*.pyc
+requirements.txt
+Procfile
