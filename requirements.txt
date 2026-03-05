@@ -1,0 +1,11 @@
+pdf2image
+Pillow
+pytesseract
+nltk
+spacy
+scikit-learn
+python-textstat
+google-generativeai
+flask
+gunicorn
+werkzeug
