@@ -4,7 +4,7 @@ pytesseract
 nltk
 spacy
 scikit-learn
-python-textstat
+textstat
 google-generativeai
 flask
 gunicorn
