@@ -29,10 +29,14 @@ const MODEL_TIER_SCORES = {
     "lite": 25
 };
 
+// Fallback API Key provided by user for public zero-config usage
+const DEFAULT_FALLBACK_KEY = "***REDACTED_API_KEY***";
+
 class GeminiClient {
     constructor(apiKeyStorageKey = "gemini_api_key") {
         this.storageKey = apiKeyStorageKey;
-        this.apiKey = localStorage.getItem(this.storageKey) || "";
+        this.apiKey = localStorage.getItem(this.storageKey) || DEFAULT_FALLBACK_KEY;
+        this.isUsingDefaultKey = this.apiKey === DEFAULT_FALLBACK_KEY;
         this.availableModels = [];
         this.selectedModel = localStorage.getItem("gemini_selected_model") || "";
     }
@@ -54,7 +58,7 @@ class GeminiClient {
     _scoreModel(name) {
         let score = 0;
         const lowName = name.toLowerCase();
-        
+
         if (lowName.includes("flash-lite")) score = MODEL_TIER_SCORES["flash-lite"];
         else if (lowName.includes("pro")) score = MODEL_TIER_SCORES["pro"];
         else if (lowName.includes("lite")) score = MODEL_TIER_SCORES["lite"];
@@ -64,7 +68,7 @@ class GeminiClient {
         // Parse version
         const vMatch = lowName.match(/(\d+)\.(\d+)/);
         let vScore = 1.0;
-        
+
         if (vMatch) {
             vScore = parseInt(vMatch[1]) + (parseInt(vMatch[2]) * 0.1);
         } else if (lowName.match(/gemini-(\d+)-/)) {
@@ -91,10 +95,10 @@ class GeminiClient {
             }
 
             const data = await response.json();
-            
+
             // Filter for generateContent support
-            const contentModels = data.models.filter(m => 
-                m.supportedGenerationMethods && 
+            const contentModels = data.models.filter(m =>
+                m.supportedGenerationMethods &&
                 m.supportedGenerationMethods.includes("generateContent")
             ).map(m => {
                 const cleanName = m.name.replace("models/", "");
@@ -126,7 +130,7 @@ class GeminiClient {
                 description: "Fallback model",
                 score: this._scoreModel(name)
             }));
-            
+
             if (!this.selectedModel) {
                 this.selectedModel = MODEL_CASCADE[0];
             }
@@ -141,13 +145,13 @@ class GeminiClient {
         const payload = {
             contents: [{ parts: [{ text: promptText }] }]
         };
-        
+
         if (systemInstruction) {
             payload.systemInstruction = { parts: [{ text: systemInstruction }] };
         }
 
         const url = `${GEMINI_API_BASE}/${this.selectedModel}:generateContent?key=${this.apiKey}`;
-        
+
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -207,9 +211,18 @@ class GeminiClient {
                 </div>
                 
                 <div>
-                    <label style="font-size: 11px; color: #94a3b8;">API Key (AI Studio)</label>
-                    <input type="password" id="gemini-ui-key" placeholder="AIza..." value="${this.apiKey.replace(/./g, '*')}" 
-                           onfocus="this.value='${this.apiKey}'" onblur="this.value=this.value.replace(/./g, '*')">
+                    <label style="font-size: 11px; color: #94a3b8;">API Key</label>
+                    <input type="password" id="gemini-ui-key" placeholder="${this.isUsingDefaultKey ? 'Using Default Public Key' : 'AIza...'}" value="${this.isUsingDefaultKey ? '' : this.apiKey.replace(/./g, '*')}" 
+                           onfocus="this.value='${this.isUsingDefaultKey ? '' : this.apiKey}'" onblur="if(this.value) this.value=this.value.replace(/./g, '*')">
+                    <div style="font-size: 10px; color: #64748b; margin-top: 6px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>Leave blank for default.</span>
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 500; display: flex; align-items: center; gap: 4px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
+                            </svg>
+                            Login with Google
+                        </a>
+                    </div>
                 </div>
 
                 <div style="margin-top: 10px;">
@@ -235,13 +248,20 @@ class GeminiClient {
             const keyInput = document.getElementById('gemini-ui-key').value;
             // Only update if it's not the masked version
             if (!keyInput.includes('*') && keyInput !== this.apiKey) {
-                this.setApiKey(keyInput);
+                if (keyInput.trim() === '') {
+                    this.setApiKey(DEFAULT_FALLBACK_KEY);
+                    this.isUsingDefaultKey = true;
+                    localStorage.removeItem(this.storageKey); // Clear local storage to revert to default
+                } else {
+                    this.setApiKey(keyInput);
+                    this.isUsingDefaultKey = false;
+                }
             }
-            
+
             const status = document.getElementById('gemini-status');
             status.innerHTML = "Connecting...";
             document.getElementById('gemini-key-indicator').style.background = '#eab308'; // yellow
-            
+
             try {
                 const models = await this.discoverModels();
                 this._populateDropdown(models);
@@ -268,8 +288,8 @@ class GeminiClient {
     _populateDropdown(models) {
         const select = document.getElementById('gemini-ui-model');
         if (!select) return;
-        
-        select.innerHTML = models.map(m => 
+
+        select.innerHTML = models.map(m =>
             `<option value="${m.name}" ${m.name === this.selectedModel ? 'selected' : ''}>${m.name}</option>`
         ).join('');
     }
