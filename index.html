@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume ATS Scanner</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Required for Client-Side PDF Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <!-- Gemini Client Resolver -->
+    <script src="/static/gemini-client.js"></script>
     <style>
         :root {
             --bg: #0a0a0f;
@@ -370,24 +375,80 @@
             document.getElementById('loading').classList.add('show');
             document.getElementById('results').classList.remove('show');
 
-            // Mock an AI backend response gracefully with a timeout
-            setTimeout(() => {
-                const mockData = {
-                    ats_score: 84,
-                    component_scores: { "Skills Match": 80, "Experience": 90, "Formatting": 85 },
-                    ai_feedback: [
-                        "Strong match for the specified skills.",
-                        "Consider quantifying your achievements with more metrics.",
-                        "Backend ML processing exceeds Vercel Free limits. This is a frontend demonstrator."
-                    ],
-                    matched_keywords: ["React", "TypeScript", "Python"],
-                    missing_keywords: ["AWS", "Kubernetes"]
-                };
-                renderResults(mockData);
+            // Try to extract text, fallback to a message if it fails
+            let resumeText = "Could not extract text from file.";
+            try {
+                if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+                    resumeText = await extractTextFromPDF(file);
+                } else {
+                    resumeText = await file.text();
+                }
+            } catch (err) {
+                console.error("File read error:", err);
+                alert("Failed to read the uploaded file.");
                 btn.disabled = false;
                 document.getElementById('loading').classList.remove('show');
-            }, 1800);
+                return;
+            }
+
+            const systemPrompt = `You are an expert ATS (Applicant Tracking System) and senior technical recruiter. 
+Analyze the provided resume against the job description.
+Return ONLY a raw JSON object with this exact structure:
+{
+  "ats_score": number (0-100 overall match score),
+  "component_scores": { "Skills Match": number, "Experience": number, "Formatting": number },
+  "ai_feedback": ["Specific actionable point 1", "Point 2", "Point 3"],
+  "matched_keywords": ["keyword1", "keyword2"],
+  "missing_keywords": ["keyword1", "keyword2"]
+}`;
+
+            const userPrompt = `JOB DESCRIPTION:\n${jobDesc}\n\nRESUME TEXT:\n${resumeText}`;
+
+            try {
+                // Call the actual Gemini API using the selected model
+                const responseText = await window.gemini.generateContent(userPrompt, systemPrompt);
+                
+                // Parse the JSON response (strip markdown code blocks if Gemini added them)
+                let cleanJson = responseText.trim();
+                if (cleanJson.startsWith('```json')) {
+                    cleanJson = cleanJson.replace(/```json\n?/, '').replace(/```\n?$/, '');
+                }
+                
+                const data = JSON.parse(cleanJson);
+                renderResults(data);
+                
+            } catch (err) {
+                console.error("Gemini Error:", err);
+                alert(`Analysis failed: ${err.message}. Please check your API key in the Gemini settings (bottom right).`);
+            } finally {
+                btn.disabled = false;
+                document.getElementById('loading').classList.remove('show');
+            }
         });
+
+        // PDF Extraction Helper
+        async function extractTextFromPDF(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async function() {
+                    try {
+                        const typedarray = new Uint8Array(this.result);
+                        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                        let text = "";
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const content = await page.getTextContent();
+                            text += content.items.map(item => item.str).join(" ") + "\n";
+                        }
+                        resolve(text);
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
 
         function renderResults(data) {
             const score = Math.round(data.ats_score || 0);
@@ -419,6 +480,13 @@
 
             document.getElementById('results').classList.add('show');
         }
+
+        // Initialize Gemini UI
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.gemini) {
+                window.gemini.injectUI();
+            }
+        });
     </script>
 </body>
 
