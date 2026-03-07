@@ -1,16 +1,17 @@
 /**
- * Gemini Smart Model Resolver (Client-Side)
- * Auto-selects the best available model directly from the browser.
+ * Gemini Smart Model Resolver (Client-Side proxy structure)
+ * Auto-selects the best available model directly from the browser by securely calling backend API endpoints.
  * 
  * Provides:
- * 1. API Key management (localStorage)
- * 2. Dynamic model discovery via `v1beta/models` REST API
+ * 1. Custom API Key input (localStorage)
+ * 2. Dynamic model discovery via `/api/models` Vercel proxy
  * 3. Auto-selection (3.1 Pro -> 3.1 Flash -> 2.5 series)
  * 4. Rate-limit aware retry capabilities
  * 5. Drop-in UI component for API key input and model selection
  */
 
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_API_MODELS = "/api/models";
+const GEMINI_API_CHAT = "/api/chat";
 
 // Known fallback cascade if discovery fails
 const MODEL_CASCADE = [
@@ -29,14 +30,11 @@ const MODEL_TIER_SCORES = {
     "lite": 25
 };
 
-// Fallback API Key provided by user for public zero-config usage
-const DEFAULT_FALLBACK_KEY = "***REDACTED_API_KEY***";
-
 class GeminiClient {
     constructor(apiKeyStorageKey = "gemini_api_key") {
         this.storageKey = apiKeyStorageKey;
-        this.apiKey = localStorage.getItem(this.storageKey) || DEFAULT_FALLBACK_KEY;
-        this.isUsingDefaultKey = this.apiKey === DEFAULT_FALLBACK_KEY;
+        this.apiKey = localStorage.getItem(this.storageKey) || "";
+        this.isUsingDefaultKey = !this.apiKey;
         this.availableModels = [];
         this.selectedModel = localStorage.getItem("gemini_selected_model") || "";
     }
@@ -51,7 +49,7 @@ class GeminiClient {
     }
 
     hasApiKey() {
-        return !!this.apiKey && this.apiKey.length > 20;
+        return true; // Proxy handles the zero-config fallback via Vercel env vars
     }
 
     // Score models like the Python backend
@@ -85,10 +83,11 @@ class GeminiClient {
     }
 
     async discoverModels() {
-        if (!this.hasApiKey()) throw new Error("API Key required to fetch models");
-
         try {
-            const response = await fetch(`${GEMINI_API_BASE}?key=${this.apiKey}`);
+            const headers = {};
+            if (this.apiKey) headers["x-gemini-api-key"] = this.apiKey;
+
+            const response = await fetch(GEMINI_API_MODELS, { headers });
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.error?.message || "Failed to fetch models");
@@ -143,18 +142,20 @@ class GeminiClient {
         if (!this.selectedModel) this.selectedModel = MODEL_CASCADE[0];
 
         const payload = {
-            contents: [{ parts: [{ text: promptText }] }]
+            contents: [{ parts: [{ text: promptText }] }],
+            model: this.selectedModel
         };
 
         if (systemInstruction) {
             payload.systemInstruction = { parts: [{ text: systemInstruction }] };
         }
 
-        const url = `${GEMINI_API_BASE}/${this.selectedModel}:generateContent?key=${this.apiKey}`;
+        const headers = { 'Content-Type': 'application/json' };
+        if (this.apiKey) headers["x-gemini-api-key"] = this.apiKey;
 
-        const response = await fetch(url, {
+        const response = await fetch(GEMINI_API_CHAT, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify(payload)
         });
 
@@ -212,7 +213,7 @@ class GeminiClient {
                 
                 <div>
                     <label style="font-size: 11px; color: #94a3b8;">API Key</label>
-                    <input type="password" id="gemini-ui-key" placeholder="${this.isUsingDefaultKey ? 'Using Default Public Key' : 'AIza...'}" value="${this.isUsingDefaultKey ? '' : this.apiKey.replace(/./g, '*')}" 
+                    <input type="password" id="gemini-ui-key" placeholder="${this.isUsingDefaultKey ? 'Using Secure Server Key' : 'AIza...'}" value="${this.isUsingDefaultKey ? '' : this.apiKey.replace(/./g, '*')}" 
                            onfocus="this.value='${this.isUsingDefaultKey ? '' : this.apiKey}'" onblur="if(this.value) this.value=this.value.replace(/./g, '*')">
                     <div style="font-size: 10px; color: #64748b; margin-top: 6px; display: flex; justify-content: space-between; align-items: center;">
                         <span>Leave blank for default.</span>
@@ -249,7 +250,7 @@ class GeminiClient {
             // Only update if it's not the masked version
             if (!keyInput.includes('*') && keyInput !== this.apiKey) {
                 if (keyInput.trim() === '') {
-                    this.setApiKey(DEFAULT_FALLBACK_KEY);
+                    this.setApiKey('');
                     this.isUsingDefaultKey = true;
                     localStorage.removeItem(this.storageKey); // Clear local storage to revert to default
                 } else {
