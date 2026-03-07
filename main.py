@@ -115,7 +115,7 @@ class ResumeATS:
             "gemini-2.5-flash",
             "gemini-flash-latest",
         ]
-        google_api_key = os.environ.get("GOOGLE_API_KEY")
+        google_api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or os.environ.get("VITE_GEMINI_API_KEY") or "***REDACTED_API_KEY***"
         if google_api_key:
             genai.configure(api_key=google_api_key)
             
