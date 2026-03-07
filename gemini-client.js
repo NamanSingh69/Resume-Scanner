@@ -10,8 +10,6 @@
  * 5. Drop-in UI component for API key input and model selection
  */
 
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-
 // Known fallback cascade if discovery fails
 const MODEL_CASCADE = [
     "gemini-3.1-pro-preview",
@@ -29,21 +27,23 @@ const MODEL_TIER_SCORES = {
     "lite": 25
 };
 
-// Fallback API Key provided by user for public zero-config usage
-const DEFAULT_FALLBACK_KEY = "***REDACTED_API_KEY***";
-
+// Backend proxy provides fallback key automatically
 class GeminiClient {
     constructor(apiKeyStorageKey = "gemini_api_key") {
         this.storageKey = apiKeyStorageKey;
-        this.apiKey = localStorage.getItem(this.storageKey) || DEFAULT_FALLBACK_KEY;
-        this.isUsingDefaultKey = this.apiKey === DEFAULT_FALLBACK_KEY;
+        this.apiKey = localStorage.getItem(this.storageKey) || "";
+        this.isUsingDefaultKey = !this.apiKey;
         this.availableModels = [];
         this.selectedModel = localStorage.getItem("gemini_selected_model") || "";
     }
 
     setApiKey(key) {
         this.apiKey = key.trim();
-        localStorage.setItem(this.storageKey, this.apiKey);
+        if (this.apiKey) {
+            localStorage.setItem(this.storageKey, this.apiKey);
+        } else {
+            localStorage.removeItem(this.storageKey);
+        }
     }
 
     getApiKey() {
@@ -85,13 +85,14 @@ class GeminiClient {
     }
 
     async discoverModels() {
-        if (!this.hasApiKey()) throw new Error("API Key required to fetch models");
-
         try {
-            const response = await fetch(`${GEMINI_API_BASE}?key=${this.apiKey}`);
+            const headers = {};
+            if (this.apiKey) headers['x-gemini-api-key'] = this.apiKey;
+
+            const response = await fetch(`/api/models`, { headers });
             if (!response.ok) {
                 const err = await response.json();
-                throw new Error(err.error?.message || "Failed to fetch models");
+                throw new Error(err.error?.message || err.error || "Failed to fetch models");
             }
 
             const data = await response.json();
@@ -139,10 +140,10 @@ class GeminiClient {
     }
 
     async generateContent(promptText, systemInstruction = null) {
-        if (!this.hasApiKey()) throw new Error("Missing API Key");
         if (!this.selectedModel) this.selectedModel = MODEL_CASCADE[0];
 
         const payload = {
+            model: this.selectedModel,
             contents: [{ parts: [{ text: promptText }] }]
         };
 
@@ -150,11 +151,12 @@ class GeminiClient {
             payload.systemInstruction = { parts: [{ text: systemInstruction }] };
         }
 
-        const url = `${GEMINI_API_BASE}/${this.selectedModel}:generateContent?key=${this.apiKey}`;
+        const headers = { 'Content-Type': 'application/json' };
+        if (this.apiKey) Object.assign(headers, { 'x-gemini-api-key': this.apiKey });
 
-        const response = await fetch(url, {
+        const response = await fetch('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify(payload)
         });
 
@@ -326,14 +328,12 @@ class GeminiClient {
             }
         });
 
-        // Save Button
         document.getElementById('gemini-ui-save').addEventListener('click', async () => {
             const keyInput = document.getElementById('gemini-ui-key').value;
             if (!keyInput.includes('*') && keyInput !== this.apiKey) {
                 if (keyInput.trim() === '') {
-                    this.setApiKey(DEFAULT_FALLBACK_KEY);
+                    this.setApiKey('');
                     this.isUsingDefaultKey = true;
-                    localStorage.removeItem(this.storageKey);
                 } else {
                     this.setApiKey(keyInput);
                     this.isUsingDefaultKey = false;
