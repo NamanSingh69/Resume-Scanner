@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%236c63ff'/%3E%3Cstop offset='100%25' stop-color='%234f46e5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='45' fill='url(%23g)'/%3E%3Crect x='30' y='25' width='40' height='50' rx='4' fill='white'/%3E%3Cline x1='38' y1='38' x2='62' y2='38' stroke='%236c63ff' stroke-width='4' stroke-linecap='round'/%3E%3Cline x1='38' y1='48' x2='62' y2='48' stroke='%236c63ff' stroke-width='4' stroke-linecap='round'/%3E%3Cline x1='38' y1='58' x2='50' y2='58' stroke='%236c63ff' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E"><text y='.9em' font-size='90'>??</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%236c63ff'/%3E%3Cstop offset='100%25' stop-color='%234f46e5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='45' fill='url(%23g)'/%3E%3Crect x='30' y='25' width='40' height='50' rx='4' fill='white'/%3E%3Cline x1='38' y1='38' x2='62' y2='38' stroke='%236c63ff' stroke-width='4' stroke-linecap='round'/%3E%3Cline x1='38' y1='48' x2='62' y2='48' stroke='%236c63ff' stroke-width='4' stroke-linecap='round'/%3E%3Cline x1='38' y1='58' x2='50' y2='58' stroke='%236c63ff' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume ATS Scanner</title>
@@ -12,6 +12,8 @@
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <!-- Gemini Client Resolver -->
     <script src="/static/gemini-client.js"></script>
+    <script src="/static/ux-manager.js"></script>
+    <link href="/static/Skeleton.css" rel="stylesheet">
     <style>
         :root {
             --bg: #0a0a0f;
@@ -265,8 +267,7 @@
 
         .loading {
             display: none;
-            text-align: center;
-            padding: 2rem;
+            width: 100%;
         }
 
         .loading.show {
@@ -323,11 +324,16 @@
         </form>
 
         <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <div>Analyzing your resume with AI...</div>
+            <div id="loading-container"></div>
         </div>
 
-        <div class="results" id="results">
+        <div class="results" id="empty-state-container" style="display:block;">
+            <div class="card" id="empty-state-inner">
+                <!-- Empty state filled by JS -->
+            </div>
+        </div>
+
+        <div class="results" id="results" style="display:none;">
             <div class="card">
                 <div class="score-ring" id="score-ring">
                     <span id="score-text">—</span>
@@ -369,12 +375,22 @@
             e.preventDefault();
             const jobDesc = document.getElementById('job-desc').value;
             const file = fileInput.files[0];
-            if (!file) { alert('Please upload a resume'); return; }
+            if (!file) { 
+                window.uxManager.toast.show('Please upload a resume (PDF, PNG, JPG, TXT)', 'error');
+                return; 
+            }
 
             const btn = document.getElementById('submit-btn');
             btn.disabled = true;
+            
+            // Show Skeleton Loader
+            const loadingContainer = document.getElementById('loading-container');
+            loadingContainer.innerHTML = window.uxManager.getSkeletonHTML();
             document.getElementById('loading').classList.add('show');
-            document.getElementById('results').classList.remove('show');
+            
+            // Hide specific UI elements pending request
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('empty-state-container').style.display = 'none';
 
             // Try to extract text, fallback to a message if it fails
             let resumeText = "Could not extract text from file.";
@@ -386,9 +402,10 @@
                 }
             } catch (err) {
                 console.error("File read error:", err);
-                alert("Failed to read the uploaded file.");
+                window.uxManager.toast.show("Failed to read the uploaded file.", 'error');
                 btn.disabled = false;
                 document.getElementById('loading').classList.remove('show');
+                document.getElementById('empty-state-container').style.display = 'block';
                 return;
             }
 
@@ -415,12 +432,15 @@ Return ONLY a raw JSON object with this exact structure:
                     cleanJson = cleanJson.replace(/```json\n?/, '').replace(/```\n?$/, '');
                 }
                 
+                
                 const data = JSON.parse(cleanJson);
                 renderResults(data);
+                window.uxManager.toast.show('Resume successfully analyzed!', 'success');
                 
             } catch (err) {
                 console.error("Gemini Error:", err);
-                alert(`Analysis failed: ${err.message}. Please check your API key in the Gemini settings (bottom right).`);
+                window.uxManager.toast.show(`Analysis failed: ${err.message}. Please check rate limits.`, 'error');
+                document.getElementById('empty-state-container').style.display = 'block';
             } finally {
                 btn.disabled = false;
                 document.getElementById('loading').classList.remove('show');
@@ -479,11 +499,21 @@ Return ONLY a raw JSON object with this exact structure:
                 matched.map(k => `<span style="background:rgba(0,214,143,0.15);color:var(--success);padding:4px 10px;border-radius:6px;margin:3px;display:inline-block;">✓ ${k}</span>`).join('') +
                 missing.map(k => `<span style="background:rgba(255,77,106,0.15);color:var(--danger);padding:4px 10px;border-radius:6px;margin:3px;display:inline-block;">✗ ${k}</span>`).join('');
 
-            document.getElementById('results').classList.add('show');
+            document.getElementById('results').style.display = 'block';
         }
 
-        // Initialize Gemini UI
+        // Initialize UI
         window.addEventListener('DOMContentLoaded', () => {
+            // Render default Empty State
+            const emptyStateInner = document.getElementById('empty-state-inner');
+            if (emptyStateInner) {
+                emptyStateInner.innerHTML = window.uxManager.getEmptyStateHTML(
+                    "No Resume Analyzed Yet", 
+                    "Paste a job description and upload your resume (.pdf, .txt, .png) to see your match score and AI feedback."
+                );
+            }
+
+            // Initialize Gemini client UI if present
             if (window.gemini) {
                 window.gemini.injectUI();
             }
@@ -492,4 +522,3 @@ Return ONLY a raw JSON object with this exact structure:
 </body>
 
 </html>
-
