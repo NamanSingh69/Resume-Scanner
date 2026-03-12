@@ -5,6 +5,7 @@ import logging
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 import google.generativeai as genai
+from gemini_model_resolver import get_best_model, get_best_model_name
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -35,9 +36,9 @@ def index():
 def analyze():
     """Analyze a resume against a job description using Gemini File API or client-side text fallback."""
     try:
-        job_description = request.form.get('job_description', '')
+        job_description = request.form.get('job_description', '').strip()
         if not job_description:
-            return jsonify({"error": "Job description is required"}), 400
+            job_description = "General Resume Analysis: Evaluate this resume for general professional strengths, weaknesses, and overall ATS readiness without a specific role in mind."
 
         # Optional: Extracted text from client (fallback if file > 4.5MB)
         client_extracted_text = request.form.get('resume_text', '')
@@ -73,8 +74,15 @@ def analyze():
         """
         user_prompt = f"JOB DESCRIPTION:\n{job_description}\n\n"
         
-        # Use gemini-2.5-flash as default back-end model (fast, multi-modal)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        # Use gemini_model_resolver to get the best model, preferring 'pro'
+        # If 'pro' fails or is rate-limited, it automatically falls back!
+        try:
+            model = get_best_model(google_api_key, preferred_tier="pro")
+            model_name_used = get_best_model_name(google_api_key, preferred_tier="pro")
+            logger.info(f"Selected model for analysis: {model_name_used}")
+        except Exception as e:
+            logger.warning(f"Resolver failed, using hardcoded fallback: {e}")
+            model = genai.GenerativeModel("gemini-2.5-flash")
         
         contents = []
 

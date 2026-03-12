@@ -3,7 +3,7 @@ import sys
 import json
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pytest
-from app import app
+from api.index import app
 from io import BytesIO
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def test_analyze_no_data(client):
     """Test analyze endpoint with missing data"""
     response = client.post('/api/analyze')
     assert response.status_code == 400
-    assert "Job description is required" in response.json['error']
+    assert "Valid resume file or extracted text required" in response.json['error']
 
 def test_analyze_missing_file(client):
     """Test analyze endpoint with missing file and extracted text"""
