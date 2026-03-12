@@ -2,8 +2,8 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Resume Scanner ATS E2E', () => {
     test.beforeEach(async ({ page }) => {
-        // Assume the app is running on localhost:5000 during test execution
-        await page.goto('http://127.0.0.1:5000');
+        // Using deployed Vercel URL
+        await page.goto('https://resume-scanner-ats.vercel.app/', { waitUntil: 'domcontentloaded', timeout: 60000 });
     });
 
     test('Loads the app correctly', async ({ page }) => {
@@ -15,7 +15,7 @@ test.describe('Resume Scanner ATS E2E', () => {
         await expect(page.locator('#results')).toBeHidden();
         
         // Gemini UI elements should be injected
-        await expect(page.locator('#gemini-mode-toggle')).toBeVisible();
+        await expect(page.locator('#gemini-floating-btn')).toBeVisible();
     });
 
     // We can't actually do a full mocked API call easily without intercepting network or having API key
@@ -34,7 +34,7 @@ test.describe('Resume Scanner ATS E2E', () => {
     // Mock API call test
     test('Simulates a successful scan report', async ({ page }) => {
         // Intercept API call
-        await page.route('/api/analyze', async route => {
+        await page.route('**/api/analyze', async route => {
             const json = {
                 "ats_score": 85,
                 "component_scores": { "Skills Match": 90, "Experience": 80, "Formatting": 85 },
