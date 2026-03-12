@@ -8,12 +8,24 @@
         {
             "src": "api/*.js",
             "use": "@vercel/node"
+        },
+        {
+            "src": "app.py",
+            "use": "@vercel/python"
         }
     ],
     "routes": [
         {
-            "src": "/api/(.*)",
-            "dest": "/api/$1"
+            "src": "/api/chat",
+            "dest": "/api/chat.js"
+        },
+        {
+            "src": "/api/models",
+            "dest": "/api/models.js"
+        },
+        {
+            "src": "/api/analyze",
+            "dest": "/app.py"
         },
         {
             "src": "/(.*)",

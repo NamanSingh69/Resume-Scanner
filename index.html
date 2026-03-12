@@ -10,6 +10,7 @@
     <!-- Required for Client-Side PDF Parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <script>window.GEMINI_CONFIG = { needsRealTimeData: false };</script>
     <!-- Gemini Client Resolver -->
     <script src="/static/gemini-client.js"></script>
     <script src="/static/ux-manager.js"></script>
@@ -295,6 +296,30 @@
             padding: 1rem;
             text-align: center;
         }
+
+        /* Mobile responsiveness improvements */
+        @media (max-width: 600px) {
+            .container {
+                padding: 1rem;
+                margin: 0;
+            }
+            .card {
+                padding: 1rem;
+            }
+            .drop-zone {
+                padding: 2.5rem 1rem;
+                min-height: 120px; /* Touch target size */
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+            textarea {
+                padding: 0.8rem;
+            }
+            button {
+                min-height: 48px; /* Standard accessible touch touch target */
+            }
+        }
     </style>
 </head>
 
@@ -392,54 +417,56 @@
             document.getElementById('results').style.display = 'none';
             document.getElementById('empty-state-container').style.display = 'none';
 
-            // Try to extract text, fallback to a message if it fails
-            let resumeText = "Could not extract text from file.";
-            try {
-                if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
-                    resumeText = await extractTextFromPDF(file);
-                } else {
-                    resumeText = await file.text();
+            // If file is > 4.5MB (Vercel Limit), extract text client-side.
+            const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+            let formData = new FormData();
+            formData.append('job_description', jobDesc);
+
+            if (file.size > MAX_FILE_SIZE) {
+                let resumeText = "";
+                try {
+                    if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+                        resumeText = await extractTextFromPDF(file);
+                    } else {
+                        resumeText = await file.text();
+                    }
+                    formData.append('resume_text', resumeText);
+                } catch (err) {
+                    console.error("File read error:", err);
+                    window.uxManager.toast.show("Failed to read the large uploaded file locally.", 'error');
+                    btn.disabled = false;
+                    document.getElementById('loading').classList.remove('show');
+                    document.getElementById('empty-state-container').style.display = 'block';
+                    return;
                 }
-            } catch (err) {
-                console.error("File read error:", err);
-                window.uxManager.toast.show("Failed to read the uploaded file.", 'error');
-                btn.disabled = false;
-                document.getElementById('loading').classList.remove('show');
-                document.getElementById('empty-state-container').style.display = 'block';
-                return;
+            } else {
+                formData.append('resume', file);
             }
 
-            const systemPrompt = `You are an expert ATS (Applicant Tracking System) and senior technical recruiter. 
-Analyze the provided resume against the job description.
-Return ONLY a raw JSON object with this exact structure:
-{
-  "ats_score": number (0-100 overall match score),
-  "component_scores": { "Skills Match": number, "Experience": number, "Formatting": number },
-  "ai_feedback": ["Specific actionable point 1", "Point 2", "Point 3"],
-  "matched_keywords": ["keyword1", "keyword2"],
-  "missing_keywords": ["keyword1", "keyword2"]
-}`;
-
-            const userPrompt = `JOB DESCRIPTION:\n${jobDesc}\n\nRESUME TEXT:\n${resumeText}`;
-
             try {
-                // Call the actual Gemini API using the selected model
-                const responseText = await window.gemini.generateContent(userPrompt, systemPrompt);
+                // Call the backend API securely
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
                 
-                // Parse the JSON response (strip markdown code blocks if Gemini added them)
-                let cleanJson = responseText.trim();
-                if (cleanJson.startsWith('```json')) {
-                    cleanJson = cleanJson.replace(/```json\n?/, '').replace(/```\n?$/, '');
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || `Server returned ${response.status}`);
                 }
                 
-                
-                const data = JSON.parse(cleanJson);
+                const data = await response.json();
                 renderResults(data);
                 window.uxManager.toast.show('Resume successfully analyzed!', 'success');
                 
+                // Track usage in the floating UI
+                if (window.gemini) {
+                    window.gemini._trackUsage("gemini-2.5-flash"); 
+                }
+                
             } catch (err) {
-                console.error("Gemini Error:", err);
-                window.uxManager.toast.show(`Analysis failed: ${err.message}. Please check rate limits.`, 'error');
+                console.error("Backend Error:", err);
+                window.uxManager.toast.show(`Analysis failed: ${err.message}`, 'error');
                 document.getElementById('empty-state-container').style.display = 'block';
             } finally {
                 btn.disabled = false;

@@ -1,11 +1,6 @@
-pdf2image
-Pillow
-pytesseract
-nltk
-spacy
-scikit-learn
-textstat
 google-generativeai
 flask
 gunicorn
 werkzeug
+pytest
+pytest-flask
