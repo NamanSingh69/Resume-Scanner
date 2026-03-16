@@ -2,5 +2,3 @@ google-generativeai
 flask
 gunicorn
 werkzeug
-pytest
-pytest-flask

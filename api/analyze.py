@@ -5,6 +5,8 @@ import logging
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 import google.generativeai as genai
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
 from gemini_model_resolver import get_best_model, get_best_model_name
 
 # Setup logging
@@ -33,6 +35,7 @@ def index():
     return render_template_string(HTML_TEMPLATE) if HTML_TEMPLATE else "index.html not found, but API is running."
 
 @app.route('/api/analyze', methods=['POST'])
+@app.route('/analyze', methods=['POST'])
 def analyze():
     """Analyze a resume against a job description using Gemini File API or client-side text fallback."""
     try:
@@ -136,6 +139,7 @@ def analyze():
         logger.error(f"Analysis error: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/health')
 @app.route('/health')
 def health():
     return jsonify({"status": "ok", "service": "resume-ats-scanner"})
