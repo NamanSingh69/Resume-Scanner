@@ -168,7 +168,7 @@ def print_available_models(api_key: str = None):
     rate limits, and which one was auto-selected.
     """
     if api_key:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key.strip())
 
     available = discover_models()
 
@@ -213,7 +213,7 @@ def get_best_model(api_key: str = None, preferred_tier: str = None) -> genai.Gen
         A configured genai.GenerativeModel using the best available model.
     """
     if api_key:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key.strip())
 
     # 1. Check for explicit env var override
     env_model = os.environ.get("GEMINI_MODEL")
@@ -255,7 +255,7 @@ def get_best_model(api_key: str = None, preferred_tier: str = None) -> genai.Gen
 def get_best_model_name(api_key: str = None, preferred_tier: str = None) -> str:
     """Same as get_best_model but returns just the model name string."""
     if api_key:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key.strip())
 
     env_model = os.environ.get("GEMINI_MODEL")
     if env_model:

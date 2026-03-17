@@ -55,8 +55,11 @@ def analyze():
         if file and not allowed_file(file.filename):
              return jsonify({"error": "Valid resume file required (PDF, PNG, JPG, TXT, DOCX)"}), 400
 
-        # Configure Gemini
-        google_api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or os.environ.get("VITE_GEMINI_API_KEY")
+        # Configure Gemini - strip() to prevent copy/paste newline errors from Vercel!
+        google_api_key = os.environ.get("GOOGLE_API_KEY", "").strip() or \
+                         os.environ.get("GEMINI_API_KEY", "").strip() or \
+                         os.environ.get("VITE_GEMINI_API_KEY", "").strip()
+                         
         if not google_api_key:
             return jsonify({"error": "Server configuration error: Gemini API key missing"}), 500
         
@@ -111,15 +114,32 @@ def analyze():
             user_prompt += f"RESUME TEXT:\n{client_extracted_text}"
             contents.append(user_prompt)
 
+        # Add system instruction as the first content block
+        contents.insert(0, system_instruction)
+        
         try:
-            response = model.generate_content(
-                contents,
-                generation_config=genai.types.GenerationConfig(
-                    response_mime_type="application/json",
-                    temperature=0.2
-                ),
-                system_instruction=system_instruction
-            )
+            try:
+                response = model.generate_content(
+                    contents,
+                    generation_config=genai.types.GenerationConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2
+                    )
+                )
+            except Exception as e:
+                # Catch late-stage 429 Quota Errors from Pro and fallback to Flash natively
+                if "429" in str(e) or "quota" in str(e).lower():
+                    logger.warning(f"Primary model hit quota. Falling back to flash. Error: {e}")
+                    fallback_model = genai.GenerativeModel("gemini-2.5-flash")
+                    response = fallback_model.generate_content(
+                        contents,
+                        generation_config=genai.types.GenerationConfig(
+                            response_mime_type="application/json",
+                            temperature=0.2
+                        )
+                    )
+                else:
+                    raise e
             
             # Delete file from Gemini if it was uploaded
             if file:
